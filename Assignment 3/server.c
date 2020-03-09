@@ -26,6 +26,7 @@ int new_socket;
 const int MAX = 100;
 void Handler(int sig) {
 	
+	printf("Server exiting due to MANUAL BREAK\n");
 	int i;
 	for(i = 0 ; i < MAX ; i++) {
 		if(client_socket[i] != 0) {
@@ -35,7 +36,9 @@ void Handler(int sig) {
 			bill[i] = 0;
 		}
 	}
+
 	close(master_socket);
+	exit(0);
 }
 	
 int main(int argc , char *argv[]) 
@@ -49,7 +52,7 @@ int main(int argc , char *argv[])
 		exit(0);
 	}
 
-	//signal(SIGINT, Handler);
+	signal(SIGINT, Handler);
 	int opt = TRUE; 
 	int master_socket , addrlen , new_socket , 
 		max_clients = 20 , activity, i , valread , sd; 
