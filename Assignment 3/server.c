@@ -10,16 +10,49 @@
 #include <sys/socket.h> 
 #include <netinet/in.h> 
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros 
-	
+#include <signal.h>
+#include<stdbool.h>
+
 #define TRUE 1 
 #define FALSE 0 
-#define PORT 8080
+int client_socket[100];
+int bill[100];
+int opt = 1;
+int master_socket;
+int addrlen;
+int port;
+int i;
+int new_socket;
+const int MAX = 100;
+void Handler(int sig) {
+	
+	int i;
+	for(i = 0 ; i < MAX ; i++) {
+		if(client_socket[i] != 0) {
+			printf("\nSocket number - %d is being closed.\n" , client_socket[i]);
+			close(client_socket[i]);
+			client_socket[i] = 0;
+			bill[i] = 0;
+		}
+	}
+	close(master_socket);
+}
 	
 int main(int argc , char *argv[]) 
 { 
+	char * port_num = argv[1];
+	int port = atoi(port_num);
+	
+	if(argc!=2)
+	{
+		printf("Enter only 2 arguments in command line\n");
+		exit(0);
+	}
+
+	//signal(SIGINT, Handler);
 	int opt = TRUE; 
-	int master_socket , addrlen , new_socket , client_socket[30] , 
-		max_clients = 30 , activity, i , valread , sd; 
+	int master_socket , addrlen , new_socket , 
+		max_clients = 20 , activity, i , valread , sd; 
 	int max_sd; 
 	struct sockaddr_in address; 
 		
@@ -28,15 +61,9 @@ int main(int argc , char *argv[])
 	//set of socket descriptors 
 	fd_set readfds; 
 		
-	//a message 
-	char *message = "Message from server to client\r\n"; 
-	
 	//initialise all client_socket[] to 0 so not checked 
-	for (i = 0; i < max_clients; i++) 
-	{ 
-		client_socket[i] = 0; 
-	} 
-		
+	memset(client_socket,0,sizeof(client_socket));
+
 	//create a master socket 
 	if( (master_socket = socket(AF_INET , SOCK_STREAM , 0)) == 0) 
 	{ 
@@ -56,7 +83,7 @@ int main(int argc , char *argv[])
 	//type of socket created 
 	address.sin_family = AF_INET; 
 	address.sin_addr.s_addr = INADDR_ANY; 
-	address.sin_port = htons( PORT ); 
+	address.sin_port = htons(port); 
 		
 	//bind the socket to localhost port 8888 
 	if (bind(master_socket, (struct sockaddr *)&address, sizeof(address))<0) 
@@ -64,10 +91,10 @@ int main(int argc , char *argv[])
 		perror("bind failed"); 
 		exit(EXIT_FAILURE); 
 	} 
-	printf("Listener on port %d \n", PORT); 
+	printf("Listener on port %d \n", port); 
 		
-	//try to specify maximum of 3 pending connections for the master socket 
-	if (listen(master_socket, 3) < 0) 
+	//try to specify maximum of max_clients pending connections for the master socket 
+	if (listen(master_socket, max_clients) < 0) 
 	{ 
 		perror("listen"); 
 		exit(EXIT_FAILURE); 
@@ -124,14 +151,6 @@ int main(int argc , char *argv[])
 			//inform user of socket number - used in send and receive commands 
 			printf("New connection , socket fd is %d , ip is : %s , port : %d\n" , new_socket , inet_ntoa(address.sin_addr) , ntohs(address.sin_port)); 
 		
-			//send new connection greeting message 
-			if(send(new_socket, message, strlen(message), 0) != strlen(message)) 
-			{ 
-				perror("send"); 
-			} 
-				
-			puts("Welcome message sent successfully"); 
-				
 			//add new socket to array of sockets 
 			for (i = 0; i < max_clients; i++) 
 			{ 
@@ -143,7 +162,94 @@ int main(int argc , char *argv[])
 						
 					break; 
 				} 
-			} 
+			}
+			read(new_socket,buffer,sizeof(buffer));
+			char type = buffer[0];
+			char upc[30] = "";
+			char quantity[30] = "";
+			
+			if(type == '0')
+			{
+				bool upc_found = FALSE;
+
+				int ind = 2;
+				int j = 0;
+				for(int i=ind;i<strlen(buffer);i++)
+				{
+					ind++;
+					if(buffer[i]!='/')
+						upc[j++] = buffer[i];
+					else
+						break;
+				}
+				j = 0;
+				for(int i=ind;i<strlen(buffer);i++)
+				{
+					ind++;
+					quantity[j++] = buffer[i];
+				}
+
+				FILE *filePointer;
+				filePointer = fopen("inventory.txt", "r");
+				char item_details[100];
+				while(fgets(item_details,sizeof(item_details),filePointer))
+				{
+					char item_upc[10] = "";
+					char item_name[50] = "";
+					char item_price[50] = "";
+
+					ind = 0;
+					j = 0;
+					for(int i = ind;i<strlen(item_details);i++)
+					{
+						ind++;
+						if(item_details[i]!='/')
+							item_upc[j++] = item_details[i];
+						else
+							break;
+					}
+					j = 0;
+					for(int i = ind;i<strlen(item_details);i++)
+					{
+						ind++;
+						if(item_details[i]!='/')
+							item_name[j++] = item_details[i];
+						else
+							break;
+					}
+					j = 0;
+					for(int i = ind;i<strlen(item_details);i++)
+					{
+						item_price[j++] = item_details[i];
+					}
+					
+					if(strcmp(upc,item_upc)==0)
+					{
+						upc_found = TRUE;
+						char response[200] = "";
+						response[0] = '0';
+						response[1] = '/';
+
+						strcat(response,item_price);
+						strcat(response,"/");
+						strcat(response,item_name);
+						write(new_socket,response,sizeof(response));
+
+						break;
+					}
+				}
+				fclose(filePointer);
+				if(!upc_found)
+				{
+					char response[200] = "1/UPC not found in database";
+					write(new_socket,response,sizeof(response));
+				}
+			}
+			else if(type=='1')
+			{
+				char response[200] = "0/Total Bill = 0";
+				write(new_socket,response,sizeof(response));	
+			}
 		} 
 			
 		//else its some IO operation on some other socket 
@@ -163,7 +269,7 @@ int main(int argc , char *argv[])
 						inet_ntoa(address.sin_addr) , ntohs(address.sin_port)); 
 						
 					//Close the socket and mark as 0 in list for reuse 
-					close( sd ); 
+					close(sd); 
 					client_socket[i] = 0; 
 				} 
 					

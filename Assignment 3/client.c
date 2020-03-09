@@ -64,8 +64,7 @@ int main(int argc, char *argv[])
 		printf("Connected to Server\n");
 	}
 	char buffer[1024] = "";
-	int buffer_len = read(sockfd, buffer,sizeof(buffer));
-	printf("%s\n\n",buffer);
+	int buffer_len;
 
 	FILE *filePointer;
 	filePointer = fopen("inventory.txt", "r");
@@ -142,7 +141,40 @@ int main(int argc, char *argv[])
 			write(sockfd,request_msg,sizeof(request_msg));
 			memset(buffer,'\0',sizeof(buffer));
 			buffer_len = read(sockfd, buffer,sizeof(buffer));
-			printf("Echo from server\n%s\n\n",buffer);
+			
+			char response_type = buffer[0];
+			if(response_type=='1')
+			{
+				char error_msg[200] = "";
+				for(int i=2;i<strlen(buffer);i++)
+					error_msg[i-2] = buffer[i];
+
+				printf("Error Message: %s\n",error_msg);
+			}
+			else
+			{
+				char price[30] = "";
+				char name[30] = "";
+
+				int ind2 = 2;
+				int k = 0;
+				for(int i=ind2;i<strlen(buffer);i++)
+				{
+					ind2++;
+					if(buffer[i]!='/')
+						price[k++] = buffer[i];
+					else
+						break;
+				}
+				k = 0;
+				for(int i=ind2;i<strlen(buffer);i++)
+				{
+					ind2++;
+					name[k++] = buffer[i];
+				}
+				printf("Name : %s Price : %s\n",name,price);
+
+			}
 		}
 		else
 		{
@@ -152,7 +184,26 @@ int main(int argc, char *argv[])
 			write(sockfd,request_msg,sizeof(request_msg));
 			memset(buffer,'\0',sizeof(buffer));
 			buffer_len = read(sockfd, buffer,sizeof(buffer));
-			printf("Echo from server\n%s\n\n",buffer);
+
+			char response_type = buffer[0];
+			if(response_type=='1')
+			{
+				char error_msg[200] = "";
+				for(int i=2;i<strlen(buffer);i++)
+					error_msg[i-2] = buffer[i];
+
+				printf("Error Message: %s\n",error_msg);
+			}
+			else
+			{
+				char total[30] = "";
+				for(int i=2;i<strlen(buffer);i++)
+				{
+					total[i-2] = buffer[i];
+				}
+				printf("Total Bill : %s\n",total);
+
+			}
 
 			close(sockfd);
 			printf("Closed from client side\n");
