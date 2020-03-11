@@ -8,6 +8,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <signal.h>
+#include<stdbool.h>
+
+#define TRUE 1 
+#define FALSE 0 
 const int ITEM = 0;
 const int CLOSE = 1;
 //The below function converts any char *
@@ -24,8 +28,8 @@ const int N = 1000;
 void Handler(int sig) {
 	printf("\nClient exiting because of manual break...\n");
 	char buf[] = "Termination of Client\n";
-	write(sockfd , buf , strlen(buf));
-	close(sockfd);
+	// write(sockfd , buf , strlen(buf));
+	// close(sockfd);
 	exit(0);
 	return;
 }
@@ -66,9 +70,13 @@ int main(int argc, char *argv[])
 	char buffer[1024] = "";
 	int buffer_len;
 
+	//printing items in inventory
+	printf("\t\t %15s\n","INVENTORY");
+	printf("\t| UPC CODE |      NAME      | PRICE |\n");
 	FILE *filePointer;
 	filePointer = fopen("inventory.txt", "r");
 	char item_details[100];
+
 	while(fgets(item_details,sizeof(item_details),filePointer))
 	{
 		char item_upc[10] = "";
@@ -99,7 +107,7 @@ int main(int argc, char *argv[])
 		{
 			item_price[j++] = item_details[i];
 		}
-		printf("%s  %s  %s\n",item_upc,item_name,item_price);
+		printf("\t%5s  %15s  %10s\n",item_upc,item_name,item_price);
 	}
 	fclose(filePointer);
 	printf("\nRequest Type = 0 for adding items to cart\n");
@@ -118,13 +126,22 @@ int main(int argc, char *argv[])
 			char upc[10];
 			printf("Enter UPC code: ");
 			scanf("%s",upc);
-			printf("\n\n");
+			// printf("\n");
 			char quantity[10];
 			printf("Enter Quantity: ");
 			scanf("%s",quantity);
-			printf("\n\n");
+			// printf("\n");
+			// Check quantity is a number 
+			bool quantity_is_num = TRUE;
+			for(int i=0;i<strlen(quantity);i++)
+				if(quantity[i] < '0' || quantity[i] > '9')
+				{
+					printf("Enter a number for quantity\n");
+					quantity_is_num = FALSE;
+				}
+			if(!quantity_is_num)
+				continue;
 
-			
 			char request_msg[150] = "";
 			request_msg[0] = '0';
 			request_msg[1] = '/';
