@@ -1,0 +1,12 @@
+01/Detergent/10
+02/Soap/40
+03/Razer/10
+04/Pen/10
+05/Register/25
+06/Notebook/30
+07/Snickers/20
+08/Stapler/20
+09/Folder/10
+10/Lighter/10
+11/Deodrant/120
+12/Shampoo/60
