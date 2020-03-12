@@ -114,11 +114,16 @@ int main(int argc, char *argv[])
 	printf("Request Type = 1 for closing connection with server and checking out\n");
 	while(1)
 	{
-		int request_type;
-		printf("Enter request type: ");
-		scanf("%d",&request_type);
-		printf("\n");
+		int request_type = -1;
 		
+		printf("\nEnter request type: ");
+		scanf("%d",&request_type);
+		
+		if(request_type!=0 && request_type!=1)
+		{
+			printf("Enter request type either 0 or 1\n");
+			continue;
+		}
 
 
 		if(request_type==0)
@@ -189,7 +194,9 @@ int main(int argc, char *argv[])
 					ind2++;
 					name[k++] = buffer[i];
 				}
-				printf("Name : %s Price : %s\n",name,price);
+				printf("-----------------------------\n");
+				printf("Name : %s | Price : %s",name,price);
+				printf("-----------------------------\n");
 
 			}
 		}

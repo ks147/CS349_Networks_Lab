@@ -19,11 +19,11 @@ int master_socket;
 int addrlen;
 int port;
 int new_socket;
-int client_socket[100];
-int bill[100];
-const int MAX = 100;
 
-char* itoa(int value, char* result, int base) {
+const int MAX = 100;
+// Utility function for converting int to string
+char* itoa(int value, char* result, int base) 
+{
     // check that the base if valid
     if (base < 2 || base > 36) { *result = '\0'; return result; }
 
@@ -46,24 +46,15 @@ char* itoa(int value, char* result, int base) {
     }
     return result;
 }
+// ctrl + C Handler
 void Handler(int sig) {
 	
 	printf("Server exiting due to MANUAL BREAK\n");
-	int i;
-	for(i = 0 ; i < MAX ; i++) {
-		if(client_socket[i] != 0) {
-			printf("\nSocket number - %d is being closed.\n" , client_socket[i]);
-			close(client_socket[i]);
-			client_socket[i] = 0;
-			bill[i] = 0;
-		}
-	}
-
 	close(master_socket);
 	exit(0);
 }
+// Function that executes everytime new client is added
 void * socketThread(void *arg)
-
 {
 
   int new_socket = *((int *)arg);
@@ -73,15 +64,7 @@ void * socketThread(void *arg)
   while(TRUE)
   {
 	  memset(buffer,'\0',sizeof(buffer));
-	  if ((valread = read(new_socket, buffer, 1024)) == 0) 
-	  { 
-	  	//Somebody disconnected , get his details and print 
-	  	printf("Host disconnected\n");
-	  	
-	  } 
-	  	
-	  
-	  else
+	  if ((valread = read(new_socket, buffer, 1024)) > 0)
 	  { 
 	  	char type = buffer[0];
 	  	char upc[30] = "";
@@ -197,19 +180,12 @@ int main(int argc , char *argv[])
 	}
 
 	signal(SIGINT, Handler);
-	int opt = TRUE; 
-	int max_clients = 20 , activity, i , valread , sd; 
-	int max_sd; 
+	int max_clients = 20; 
 	struct sockaddr_in address; 
 		
 	char buffer[1025]; //data buffer of 1K 
 		
-	//set of socket descriptors 
-	fd_set readfds; 
-		
-	//initialise all client_socket[] to 0 so not checked 
-	memset(client_socket,0,sizeof(client_socket));
-	memset(bill,0,sizeof(bill));
+	
 
 	//create a master socket 
 	if( (master_socket = socket(AF_INET , SOCK_STREAM , 0)) == 0) 
@@ -254,11 +230,14 @@ int main(int argc , char *argv[])
 		
 		
 		if( pthread_create(&tid[no_clients], NULL, socketThread, &new_socket) != 0 )
-					printf("Failed to create thread\n");	
-		if( no_clients>= 50)
+			printf("Failed to create thread\n");
+
+		// if max clients are connected
+		//  then wait for each client to disconnect
+		if( no_clients>= max_clients)
 		{
 		  no_clients = 0;
-		  while(no_clients < 50)
+		  while(no_clients < max_clients)
 		  {
 		  	pthread_join(tid[no_clients++],NULL);
 		  }
