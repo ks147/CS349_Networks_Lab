@@ -70,6 +70,9 @@ void * socketThread(void *arg)
 	  	char upc[30] = "";
 	  	char quantity[30] = "";
 	  	
+	  	// if request type = ITEM 
+	  	// find upc code in inventory file
+	  	// and return item_price and item_name
 	  	if(type == '0')
 	  	{
 	  		bool upc_found = FALSE;
@@ -91,7 +94,7 @@ void * socketThread(void *arg)
 	  			quantity[j++] = buffer[i];
 	  		}
 
-
+	  		// read inventory file
 	  		FILE *filePointer;
 	  		filePointer = fopen("inventory.txt", "r");
 	  		char item_details[100];
@@ -138,7 +141,7 @@ void * socketThread(void *arg)
 	  				strcat(response,item_name);
 	  				write(new_socket,response,sizeof(response));
 
-	  				// Calculating bill for client[i]
+	  				// Calculating bill for client
 	  				total_bill+= atoi(quantity)*atoi(item_price);
 	  				break;
 	  			}
@@ -150,6 +153,8 @@ void * socketThread(void *arg)
 	  			write(new_socket,response,sizeof(response));
 	  		}
 	  	}
+	  	// if request type = CLOSE 
+	  	// give running total to the client
 	  	else if(type=='1')
 	  	{
 	  		// convert bill to string

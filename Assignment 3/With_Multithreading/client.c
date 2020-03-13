@@ -14,17 +14,8 @@
 #define FALSE 0 
 const int ITEM = 0;
 const int CLOSE = 1;
-//The below function converts any char *
-//into a string
-//Required to convert port number 
-//from string to integer
 int sockfd , connfd;
 
-//There is some error there when 
-//you delcare buffer as a global variable
-//That's why buffer has been declared as 
-// a local variable inside the main function
-const int N = 1000;
 void Handler(int sig) {
 	printf("\nClient exiting because of manual break...\n");
 	char buf[] = "Termination of Client\n";
@@ -36,6 +27,8 @@ void Handler(int sig) {
 
 int main(int argc, char *argv[]) 
 { 
+	// Take ip adress and port 
+	//  from command line
 	char * ip = argv[1];
 	char * port_num = argv[2];
 	int port = atoi(port_num);
@@ -165,6 +158,7 @@ int main(int argc, char *argv[])
 			buffer_len = read(sockfd, buffer,sizeof(buffer));
 			
 			char response_type = buffer[0];
+			// code = 1 is for error message
 			if(response_type=='1')
 			{
 				char error_msg[200] = "";
@@ -173,6 +167,8 @@ int main(int argc, char *argv[])
 
 				printf("Error Message: %s\n",error_msg);
 			}
+			// code = 0 for OK response
+			// extract price and name from response
 			else
 			{
 				char price[30] = "";
@@ -210,6 +206,8 @@ int main(int argc, char *argv[])
 			buffer_len = read(sockfd, buffer,sizeof(buffer));
 
 			char response_type = buffer[0];
+			
+			// code = 1 for error messages
 			if(response_type=='1')
 			{
 				char error_msg[200] = "";
