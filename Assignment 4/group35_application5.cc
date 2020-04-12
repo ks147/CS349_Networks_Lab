@@ -18,7 +18,7 @@ double simulationTime = 50.0;
 
 void calculate_avg_bandwidths()
 {
-  FILE* fp = fopen("server.pcap","r");
+  FILE* fp = fopen("stats.txt","r");
   char line[1024];
   uint32_t rtsctsack_size = 14;
   uint32_t tcpack_size = 74;
@@ -60,7 +60,17 @@ void calculate_avg_bandwidths()
   printf("Average bandwidth spent in transmitting CTS : %f\n",cts_bandwidth );
   printf("Average bandwidth spent in transmitting RTS-CTS ACKs : %f\n",rtsctsack_bandwidth );
   printf("Average bandwidth spent in transmitting TCP ACKs : %f\n",tcpack_bandwidth );
-  printf("Average bandwidth spent in transmitting TCP segments : %f\n",data_bandwidth );    
+  printf("Average bandwidth spent in transmitting TCP segments : %f\n",data_bandwidth ); 
+
+  /*Writing stats to .txt file for plotting graph output*/
+  FILE *FilePointer;
+  FilePointer = fopen("statsdump.txt","a");
+  fprintf(FilePointer,"%lf:",rts_bandwidth);
+  fprintf(FilePointer,"%lf:",cts_bandwidth);
+  fprintf(FilePointer,"%lf:",rtsctsack_bandwidth);
+  fprintf(FilePointer,"%lf:",tcpack_bandwidth);
+  fprintf(FilePointer,"%lf:",data_bandwidth);
+  fclose(FilePointer); 
 }
 
 uint32_t MacTxDropCount = 0, PhyTxDropCount = 0, PhyRxDropCount = 0;
@@ -102,7 +112,35 @@ void setTCPVariant(std::string tcpVariant)
       Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TypeId::LookupByName (tcpVariant)));
     }
 }
+void GetStats(FlowMonitorHelper &flowHelper,Ptr<FlowMonitor> &flowMonitor)
+{
+ 	/* Check for lost packets */
+	flowMonitor->CheckForLostPackets ();  
+	/*Check flow stats */
+	/* Get stats for transmitted,received packets */
+	Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowHelper.GetClassifier ());
+	FlowMonitor::FlowStatsContainer stats = flowMonitor->GetFlowStats ();
+	for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); i++)
+	{
+		Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+		std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+		std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
+		std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+		std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / (i->second.timeLastRxPacket.GetSeconds()-i->second.timeFirstTxPacket.GetSeconds()) / 1000/1000 << " Mbps\n";
+		std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
+		std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+		std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / (i->second.timeLastRxPacket.GetSeconds()-i->second.timeFirstTxPacket.GetSeconds()) / 1000/1000 << " Mbps\n";
+	}
 
+	double averageThroughput = ((sink->GetTotalRx () * 8) / (1e6  * simulationTime));
+	std::cout << "\nAverage TCP throughtput obtained: " << averageThroughput << " Mbit/s" << std::endl;
+	FILE *FilePointer;
+	FilePointer = fopen("statsdump.txt","a");
+	fprintf(FilePointer,"%lf:",averageThroughput);
+	fclose(FilePointer);
+
+	flowMonitor->SerializeToXmlFile("group35.xml", true, true);
+}
 void Simulator_80211(uint32_t RtsCtsThreshold)
 {
 
@@ -123,7 +161,7 @@ void Simulator_80211(uint32_t RtsCtsThreshold)
   /*Channel Set up*/
   YansWifiChannelHelper wifiChannel;
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-  /*follows the equation of isotropic antenna */
+  /*the propogation loss follows random distribution*/
   wifiChannel.AddPropagationLoss ("ns3::RandomPropagationLossModel");
 
   /* Setup Physical Layer */
@@ -178,12 +216,12 @@ void Simulator_80211(uint32_t RtsCtsThreshold)
   sink = StaticCast<PacketSink> (serverApp.Get (0));
 
   /* Install TCP/UDP Transmitter on the station */
-  OnOffHelper onOffHelper ("ns3::TcpSocketFactory", (InetSocketAddress (AccessPointInterface.GetAddress (0), 9)));
-  onOffHelper.SetAttribute ("PacketSize", UintegerValue (tcpSegmentSize));
-  onOffHelper.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-  onOffHelper.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-  onOffHelper.SetAttribute ("DataRate", DataRateValue (DataRate (datarate)));
-  ApplicationContainer clientApp = onOffHelper.Install (clientNodes);
+  OnOffHelper clientAppHelper ("ns3::TcpSocketFactory", (InetSocketAddress (AccessPointInterface.GetAddress (0), 9)));
+  clientAppHelper.SetAttribute ("PacketSize", UintegerValue (tcpSegmentSize));
+  clientAppHelper.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
+  clientAppHelper.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
+  clientAppHelper.SetAttribute ("DataRate", DataRateValue (DataRate (datarate)));
+  ApplicationContainer clientApp = clientAppHelper.Install (clientNodes);
 
   double start_time = rand()%5 + 1;
   serverApp.Start (Seconds (start_time));
@@ -195,63 +233,53 @@ void Simulator_80211(uint32_t RtsCtsThreshold)
     wifiPhy.EnablePcap ("Station", clientDevice);
   }
 
-  FlowMonitorHelper flowmon;
-  Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
-
   // Trace Collisions
   Config::ConnectWithoutContext("ns3::WifiNetDevice/Mac/MacTxDrop", MakeCallback(&MacTxDrop));
   Config::ConnectWithoutContext("ns3::WifiNetDevice/Phy/PhyRxDrop", MakeCallback(&PhyRxDrop));
-  Config::ConnectWithoutContext("ns3::WifiNetDevice/Phy/PhyTxDrop", MakeCallback(&PhyTxDrop));
+  Config::ConnectWithoutContext("ns3::WifiNetDevice/Phy/PhyTxDrop", MakeCallback(&PhyTxDrop));	
+  
+  Ptr<FlowMonitor> flowMonitor;
+  FlowMonitorHelper flowHelper;
+  flowMonitor = flowHelper.InstallAll();
+
+  
 
   /* Start Simulation */
   Simulator::Stop (Seconds (simulationTime));
   Simulator::Run ();
-  
-
-  monitor->CheckForLostPackets ();
-
-  /*Check flow stats */
-  /* Get stats for transmitted,received packets */
-  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
-  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
-  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); i++)
-  {
-  Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-  std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
-  std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
-  std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
-  std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / (i->second.timeLastRxPacket.GetSeconds()-i->second.timeFirstTxPacket.GetSeconds()) / 1000/1000 << " Mbps\n";
-  std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
-  std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
-  std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / (i->second.timeLastRxPacket.GetSeconds()-i->second.timeFirstTxPacket.GetSeconds()) / 1000/1000 << " Mbps\n";
-  }
-
-  double averageThroughput = ((sink->GetTotalRx () * 8) / (1e6  * simulationTime));
-  std::cout << "\nAverage TCP throughtput obtained: " << averageThroughput << " Mbit/s" << std::endl;
-
-  monitor->SerializeToXmlFile("group35.xml", true, true);
+  GetStats(flowHelper,flowMonitor);  
 
   Simulator::Destroy ();
 }
 
 int main()
 {
-  std::string tcpVariant = "TcpWestwood"; //default TcpWestwood
+  std::string tcpVariant; //default TcpWestwood
     std::cout<<"Enter TCP variant TcpWestwood/TcpHybla\n";
     std::cin>>tcpVariant;
-  setTCPVariant(tcpVariant);
+    tcpVariant = "ns3::"+tcpVariant;
+  	setTCPVariant(tcpVariant);
+  	FILE *FilePointer;
+  	FilePointer = fopen("statsdump.txt","w");
+  	fclose(FilePointer);
 
-  uint32_t thresholds[] = {0,256,512,1024};
-  for(int i = 0; i < 4; i++)
-  {
-    uint32_t rtsCtsThreshold = thresholds[i];
-    std::cout<<"Running simulation with RTS threshold : "<<rtsCtsThreshold<<"\n";
-    Simulator_80211(rtsCtsThreshold);
-    system("tcpdump -nn -tt -r Server-1-0.pcap > server.pcap");
-    calculate_avg_bandwidths();
-    std::cout<<"Total number of packets lost due to collisions : "<<MacTxDropCount+PhyTxDropCount+PhyRxDropCount<<"\n";
-    std::cout<<"---------------------------------------------------------------"<<"\n";
-  }
+  	uint32_t rtsCtsThresholds[] = {0,256,512,1024};
+  	for(int i = 0; i < 4; i++)
+  	{
+	    std::cout<<"Running simulation with RTS threshold : "<<rtsCtsThresholds[i]<<"\n";
+	    Simulator_80211(rtsCtsThresholds[i]);
+	    system("tcpdump -nn -tt -r Server-1-0.pcap > stats.txt");
+	    calculate_avg_bandwidths();
+	    int collisions = MacTxDropCount+PhyTxDropCount+PhyRxDropCount;
+	    std::cout<<"Total number of packets lost due to collisions : "<<collisions<<"\n";
+	    FilePointer = fopen("statsdump.txt","a");
+	    fprintf(FilePointer,"%d\n",collisions);
+	    fclose(FilePointer);
+
+	    std::cout<<"---------------------------------------------------------------"<<"\n";
+	 }
+	 system("python3 ./scratch/plot_graph.py");
+
   return 0;
 }
 
